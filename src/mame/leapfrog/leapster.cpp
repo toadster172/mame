@@ -228,6 +228,7 @@ private:
 	DECLARE_DEVICE_IMAGE_LOAD_MEMBER(cart_load);
 
 	INTERRUPT_GEN_MEMBER(testirq);
+	TIMER_CALLBACK_MEMBER(leapster_timer_overflow);
 
 	uint32_t leapster_1801000_r();
 	uint32_t leapster_1801004_r();
@@ -239,9 +240,10 @@ private:
 	uint32_t leapster_180b000_r();
 	uint32_t leapster_180b004_r();
 	uint32_t leapster_180b008_r();
-	uint32_t leapster_180d400_r();
 	uint32_t leapster_180d514_r();
-	uint32_t leapster_180d800_r();
+
+	uint32_t leapster_timer_r(uint32_t offset);
+	void leapster_timer_w(uint32_t offset, uint32_t data);
 
 	void leapster_aux0047_w(uint32_t data);
 	uint32_t leapster_aux0048_r();
@@ -259,6 +261,13 @@ private:
 
 	uint16_t m_1a_data[0x800];
 	int m_1a_pointer;
+
+	uint32_t m_timer_ticks[3]{};
+	uint32_t m_timer_control[3]{};
+	uint32_t m_timer_max[3]{};
+	emu_timer *m_overflow_timer[3]{};
+	// Timer 3 interrupts are never enabled, so its IRQ number is unknown
+	static constexpr int TIMER_IRQS[3] = {0x19, 0x1a, 0x00};
 
 	required_device<arcompact_device> m_maincpu;
 	required_device<generic_slot_device> m_cart;
@@ -362,7 +371,7 @@ uint32_t leapster_state::leapster_1809004_r()
 {
 	logerror("%s: leapster_1809004_r (return usually checked against 0x00200000)\n", machine().describe_context());
 	// does an AND with 0x00200000 and often jumps to dead loops if that fails
-	return 0x00200000;
+	return 0x04200000;
 }
 
 uint32_t leapster_state::leapster_1809008_r()
@@ -392,14 +401,6 @@ uint32_t leapster_state::leapster_180b008_r()
 	return 0x00000001;
 }
 
-uint32_t leapster_state::leapster_180d400_r()
-{
-	logerror("%s: leapster_180d400_r (return usually checked against 0x0030d400)\n", machine().describe_context());
-	// does a BRLO.ND against it
-	// loops against 0x0030d400 (3,200,000) at 4003A52A for example
-	return 0x0030d400;
-}
-
 uint32_t leapster_state::leapster_180d514_r()
 {
 	logerror("%s: leapster_180d514_r (return usually checked against 0x0030d400)\n", machine().describe_context());
@@ -407,13 +408,62 @@ uint32_t leapster_state::leapster_180d514_r()
 	return 0x00000080;
 }
 
-uint32_t leapster_state::leapster_180d800_r()
+uint32_t leapster_state::leapster_timer_r(uint32_t offset)
 {
-	logerror("%s: leapster_180d800_r (return usually checked against 0x00027100 or 0x00003e80)\n", machine().describe_context());
-	// does a BRLO.ND against it
-	// loops against 0x00027100 (160,000)
-	// loops against 0x00003e80 (16,000) in other places 4003A56C for example
-	return 0x00027100;
+	offset *= 4;
+
+	int index = BIT(offset, 10, 2);
+
+	// Normalize timer 0 address to be in line with timers 1 and 2
+	if (index == 0)
+	{
+		offset -= 0x84;
+	}
+
+	switch (BIT(offset, 2, 2))
+	{
+		case 0: // Tick count
+			return m_timer_ticks[index] + m_overflow_timer[index]->elapsed().as_ticks(16'000'000);
+		case 1: // Control register
+			return m_timer_control[index];
+		case 2: // Max ticks
+			return m_timer_max[index];
+	}
+
+	return 0;
+}
+
+void leapster_state::leapster_timer_w(uint32_t offset, uint32_t data)
+{
+	offset *= 4;
+
+	int index = BIT(offset, 10, 2);
+
+	// Normalize timer 0 address to be in line with timers 1 and 2
+	if (index == 0)
+	{
+		offset -= 0x84;
+	}
+
+	switch (BIT(offset, 2, 2))
+	{
+		case 0: { // Tick count
+			m_timer_ticks[index] = data;
+			uint32_t ticks_until_overflow = data >= m_timer_max[index] ? 0 : m_timer_max[index] - data;
+			m_overflow_timer[index]->reset(attotime::from_ticks(ticks_until_overflow, 16'000'000));
+			break;
+		}
+		case 1: // Control register
+			m_timer_control[index] = data;
+			break;
+		case 2: { // Max ticks
+			m_timer_max[index] = data;
+			m_timer_ticks[index] += m_overflow_timer[index]->elapsed().as_ticks(16'000'000);
+			uint32_t ticks_until_overflow = m_timer_ticks[index] >= data ? 0 : data - m_timer_ticks[index];			
+			m_overflow_timer[index]->reset(attotime::from_ticks(ticks_until_overflow, 16'000'000));
+			break;
+		}
+	}
 }
 
 uint32_t leapster_state::screen_update_leapster(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
@@ -441,6 +491,12 @@ void leapster_state::machine_start()
 		m_maincpu->space(AS_PROGRAM).install_rom(0x80000000, 0x807fffff, m_cart_rom->base());
 	}
 
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		m_overflow_timer[i] = timer_alloc(FUNC(leapster_state::leapster_timer_overflow), this);
+		m_overflow_timer[i]->set_param(i);
+	}
+
 	save_item(NAME(m_1a_data));
 }
 
@@ -449,6 +505,14 @@ void leapster_state::machine_reset()
 	m_1a_pointer = 0;
 	for (int i = 0; i < 0x800; i++)
 		m_1a_data[i] = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		m_timer_ticks[i] = 0;
+		m_timer_control[i] = 0;
+		m_timer_max[i] = 0xffffffff;
+		m_overflow_timer[i]->reset(attotime::from_ticks(m_timer_max[i], 16'000'000));
+	}
 }
 
 void leapster_state::leapster_map(address_map &map)
@@ -473,11 +537,9 @@ void leapster_state::leapster_map(address_map &map)
 	map(0x0180b004, 0x0180b007).r(FUNC(leapster_state::leapster_180b004_r));
 	map(0x0180b008, 0x0180b00b).r(FUNC(leapster_state::leapster_180b008_r));
 
-	map(0x0180d400, 0x0180d403).r(FUNC(leapster_state::leapster_180d400_r));
+	map(0x0180'd000, 0x0180'd8ff).rw(FUNC(leapster_state::leapster_timer_r), FUNC(leapster_state::leapster_timer_w));
 
 	map(0x0180d514, 0x0180d517).r(FUNC(leapster_state::leapster_180d514_r));
-
-	map(0x0180d800, 0x0180d803).r(FUNC(leapster_state::leapster_180d800_r));
 
 	map(0x03000000, 0x030007ff).ram(); // puts stack here, writes a pointer @ 0x03000000 on startup
 	map(0x03000800, 0x0300ffff).ram(); // some of the later models need to store stack values here (or code execution has gone wrong?)
@@ -502,7 +564,18 @@ void leapster_state::leapster_aux(address_map &map)
 
 INTERRUPT_GEN_MEMBER(leapster_state::testirq)
 {
-	m_maincpu->set_input_line(0, ASSERT_LINE);
+//	m_maincpu->set_input_line(0x12, ASSERT_LINE);
+}
+
+TIMER_CALLBACK_MEMBER(leapster_state::leapster_timer_overflow)
+{
+	m_timer_ticks[param] = 0;
+	m_overflow_timer[param]->reset(attotime::from_ticks(m_timer_max[param], 16'000'000));
+
+	if (m_timer_control[param] == 3 && TIMER_IRQS[param] != 0)
+	{
+		m_maincpu->set_input_line(TIMER_IRQS[param], ASSERT_LINE);
+	}
 }
 
 void leapster_state::leapster(machine_config &config)
