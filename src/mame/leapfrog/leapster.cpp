@@ -242,6 +242,8 @@ private:
 	uint32_t leapster_180b008_r();
 	uint32_t leapster_180d514_r();
 
+	uint32_t leapster_adc_r(uint32_t offset);
+	void leapster_adc_w(uint32_t offset, uint32_t data);
 	uint32_t leapster_timer_r(uint32_t offset);
 	void leapster_timer_w(uint32_t offset, uint32_t data);
 
@@ -408,6 +410,27 @@ uint32_t leapster_state::leapster_180d514_r()
 	return 0x00000080;
 }
 
+// ADC: I/O registers 0x0180'0090 - 0x0180'00ab, Drives IRQ vector 0x10
+// Controls communication related to battery power level(?)
+// 0x0180'00a8: Seems to be a status register. Bit 9 (0x100) seems to be a ready / received bit. 
+
+uint32_t leapster_state::leapster_adc_r(uint32_t offset)
+{
+	// The BIOS busy-loops while waiting for the ready bit to be set, so it needs to be emulated
+	if (offset == 6) // status
+	{
+		return 0x100;
+	}
+
+	logerror("%s: Unknown ADC I/O read! Addr: %08x\n", machine().describe_context(), 0x0180'0090 + (offset * 4));
+	return 0;
+}
+
+void leapster_state::leapster_adc_w(uint32_t offset, uint32_t data)
+{
+	logerror("%s: Unknown ADC I/O write! Addr: %08x, data: %08x\n", machine().describe_context(), 0x0180'0090 + (offset * 4), data);
+}
+
 uint32_t leapster_state::leapster_timer_r(uint32_t offset)
 {
 	offset *= 4;
@@ -522,7 +545,7 @@ void leapster_state::leapster_map(address_map &map)
 	map(0x00000000, 0x007fffff).mirror(0x40000000).rom().region("maincpu", 0);
 	//map(0x40000000, 0x407fffff).rom().region("maincpu", 0);
 
-//  map(0x01800000, 0x0180ffff).ram();
+	map(0x0180'0090, 0x0180'00ab).rw(FUNC(leapster_state::leapster_adc_r), FUNC(leapster_state::leapster_adc_w));
 
 	map(0x01801000, 0x01801003).r(FUNC(leapster_state::leapster_1801000_r));
 	map(0x01801004, 0x01801007).r(FUNC(leapster_state::leapster_1801004_r));
