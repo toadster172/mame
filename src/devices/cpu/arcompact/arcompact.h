@@ -546,7 +546,8 @@ private:
 
 	// arcompact_helper.ipp
 	bool check_condition(uint8_t condition);
-	void do_flags_overflow(uint32_t result, uint32_t b, uint32_t c);
+	void do_flags_overflow_add(uint32_t result, uint32_t b, uint32_t c);
+	void do_flags_overflow_sub(uint32_t result, uint32_t b, uint32_t c);
 	void do_flags_add(uint32_t result, uint32_t b, uint32_t c);
 	void do_flags_sub(uint32_t result, uint32_t b, uint32_t c);
 	void do_flags_nz(uint32_t result);

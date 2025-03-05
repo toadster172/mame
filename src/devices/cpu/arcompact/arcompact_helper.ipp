@@ -35,25 +35,34 @@ inline bool arcompact_device::check_condition(uint8_t condition)
 }
 
 
-inline void arcompact_device::do_flags_overflow(uint32_t result, uint32_t b, uint32_t c)
+inline void arcompact_device::do_flags_overflow_add(uint32_t result, uint32_t b, uint32_t c)
 {
-	if ((b & 0x80000000) == (c & 0x80000000))
+	if ((b & 0x80000000) == (c & 0x80000000) && (result & 0x80000000) != (b & 0x80000000))
 	{
-		if ((result & 0x80000000) != (b & 0x80000000))
-		{
-			status32_set_v();
-		}
-		else
-		{
-			status32_clear_v();
-		}
+		status32_set_v();
+	}
+	else
+	{
+		status32_clear_v();
+	}
+}
+
+inline void arcompact_device::do_flags_overflow_sub(uint32_t result, uint32_t b, uint32_t c)
+{
+	if ((b & 0x80000000) != (c & 0x80000000) && (result & 0x80000000) != (b & 0x80000000))
+	{
+		status32_set_v();
+	}
+	else
+	{
+		status32_clear_v();
 	}
 }
 
 inline void arcompact_device::do_flags_add(uint32_t result, uint32_t b, uint32_t c)
 {
 	do_flags_nz(result);
-	do_flags_overflow(result, b, c);
+	do_flags_overflow_add(result, b, c);
 
 	if (result < b)
 	{
@@ -68,7 +77,7 @@ inline void arcompact_device::do_flags_add(uint32_t result, uint32_t b, uint32_t
 inline void arcompact_device::do_flags_sub(uint32_t result, uint32_t b, uint32_t c)
 {
 	do_flags_nz(result);
-	do_flags_overflow(result, b, c);
+	do_flags_overflow_sub(result, b, c);
 
 	if (result > b)
 	{
