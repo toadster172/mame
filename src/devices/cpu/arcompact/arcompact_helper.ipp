@@ -358,16 +358,15 @@ inline uint32_t arcompact_device::handleop32_general_SOP_group(uint32_t op, opha
 	{
 		uint8_t breg = common32_get_breg(op);
 		uint8_t creg = common32_get_creg(op);
-		int size = check_limm(breg, creg);
+		int size = check_limm(creg);
 		m_regs[breg] = ophandler(*this, m_regs[creg], common32_get_F(op));
 		return m_pc + size;
 	}
 	case 0x01:
 	{
 		uint8_t breg = common32_get_breg(op);
-		int size = check_limm(breg);
 		m_regs[breg] = ophandler(*this, common32_get_u6(op), common32_get_F(op));
-		return m_pc + size;
+		return m_pc + 4;
 	}
 	case 0x02:
 	case 0x03:
