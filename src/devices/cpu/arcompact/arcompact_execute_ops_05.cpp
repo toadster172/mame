@@ -158,7 +158,7 @@ void arcompact_device::handleop32_MUL64_do_op(arcompact_device &o, uint32_t src1
 {
 	// The Leapster's CPU seems to also store the lower 32-bits of result in MMID. See comment in handleop_MUL64_S_0_b_c
 
-	uint64_t result = (int32_t)src1 * (int32_t)src2;
+	uint64_t result = (int64_t)(int32_t)src1 * (int64_t)(int32_t)src2;
 	o.m_regs[REG_MLO] = result & 0xffffffff;
 //	o.m_regs[REG_MMID] = (result >> 16) & 0xffffffff;
 	o.m_regs[REG_MMID] = result & 0xffffffff;
@@ -185,7 +185,7 @@ void arcompact_device::handleop32_MULU64_do_op(arcompact_device &o, uint32_t src
 {
 	// The Leapster's CPU seems to also store the lower 32-bits of result in MMID. See comment in handleop_MUL64_S_0_b_c
 
-	uint64_t result = src1 * src2;
+	uint64_t result = (uint64_t)src1 * (uint64_t)src2;
 	o.m_regs[REG_MLO] = result & 0xffffffff;
 //	o.m_regs[REG_MMID] = (result >> 16) & 0xffffffff;
 	o.m_regs[REG_MMID] = result & 0xffffffff;

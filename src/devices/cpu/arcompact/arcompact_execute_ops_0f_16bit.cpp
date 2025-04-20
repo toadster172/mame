@@ -107,7 +107,7 @@ uint32_t arcompact_device::handleop_MUL64_S_0_b_c(uint16_t op)
 
 	uint8_t breg = common16_get_and_expand_breg(op);
 	uint8_t creg = common16_get_and_expand_creg(op);
-	uint64_t result = (int32_t)m_regs[breg] * (int32_t)m_regs[creg];
+	uint64_t result = (int64_t)(int32_t)m_regs[breg] * (int64_t)(int32_t)m_regs[creg];
 	m_regs[REG_MLO] = result & 0xffffffff;
 //	m_regs[REG_MMID] = (result >> 16) & 0xffffffff;
 	m_regs[REG_MMID] = result & 0xffffffff;
