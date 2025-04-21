@@ -63,17 +63,19 @@ void arcompact_device::check_interrupts()
 	{
 		level_masked_ints = m_pending_ints & (m_AUX_IRQ_LEV);
 
-		m_regs[REG_ILINK1] = m_pc;
-		m_status32_l1 = m_status32;
-		m_AUX_IRQ_LV12 |= 0x00000001;
+		m_regs[REG_ILINK2] = m_pc;
+		m_status32_l2 = m_status32;
+		m_status32 &= 0xffff'fff9;
+		m_AUX_IRQ_LV12 |= 0x00000002;
 	}
 	else if (m_status32 & 0x0000'0002 && (m_pending_ints & ~m_AUX_IRQ_LEV) != 0)
 	{
 		level_masked_ints = m_pending_ints & ~m_AUX_IRQ_LEV;
 
-		m_regs[REG_ILINK2] = m_pc;
-		m_status32_l2 = m_status32;
-		m_AUX_IRQ_LV12 |= 0x00000002;
+		m_regs[REG_ILINK1] = m_pc;
+		m_status32_l1 = m_status32;
+		m_status32 &= 0xffff'fffd;
+		m_AUX_IRQ_LV12 |= 0x00000001;
 	}
 	else
 	{
