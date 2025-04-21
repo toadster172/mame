@@ -92,6 +92,7 @@ void arcompact_device::check_interrupts()
 	standard_irq_callback(vector, m_pc);
 
 	set_pc(m_INTVECTORBASE + vector * 8);
+	m_allow_loop_check = false;
 	m_pending_ints &= ~(1 << vector);
 	debugreg_clear_ZZ();
 }
@@ -122,6 +123,7 @@ void arcompact_device::execute_run()
 
 				m_delayactive = false;
 				m_delaylinks = false;
+				m_allow_loop_check = false;
 			}
 			else
 			{
@@ -131,9 +133,9 @@ void arcompact_device::execute_run()
 
 			// hardware loops
 
-			// NOTE: if LPcc condition code fails, the m_PC returned will be m_LP_END
-			// which will then cause this check to happen and potentially jump back to
-			// the start of the loop if LP_COUNT is anything other than 1, this should
+			// NOTE: if LPcc condition code fails or a jump happens, the m_PC returned 
+			// can be m_LP_END which will then cause this check to happen and potentially
+			// jump to the start of the loop if LP_COUNT is anything other than 1, this should
 			// not happen.  It could be our PC handling needs to be better?  Either way
 			// guard against it!
 			if (m_allow_loop_check)
