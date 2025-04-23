@@ -640,9 +640,6 @@ ROM_START(leapster)
 	ROM_REGION(0x800000, "maincpu", ROMREGION_ERASE00)
 	ROM_SYSTEM_BIOS( 0, "uni15", "Universal v1.5" ) // 152-10346 Leapster BaseROM Universal v1.5 - Sep 04 2003 10:46:47
 	ROM_LOAD_BIOS( 0, "155-10072-a.bin"   , 0x00000, 0x200000, CRC(af05e5a0) SHA1(d4468d060543ba7e44785041093bc98bcd9afa07) )
-
-	// most (all?) ROMs below seem to be from LMAX devices, or Leapster 2 devices based on the boot logos contained within!
-	// TODO: properly sort once they boot in the driver
 	ROM_SYSTEM_BIOS( 1, "us21",  "USA v2.1" )       // 152-11265 Leapster BaseROM US v2.1        - Apr 13 2005 15:34:57
 	ROM_LOAD_BIOS( 1, "152-11265_2.1.bin",  0x00000, 0x800000, CRC(9639b3ae) SHA1(002873b782e823c7a8159deed16c78c149f2afab) )
 	ROM_SYSTEM_BIOS( 2, "uk21",  "UK v2.1" )        // 152-11452 Leapster BaseROM UK v2.1        - Aug 30 2005 16:01:46
@@ -651,8 +648,6 @@ ROM_START(leapster)
 	ROM_LOAD_BIOS( 3, "leapster2_1006.bin", 0x00000, 0x800000, BAD_DUMP CRC(a69ed8ca) SHA1(e6aacba0c39b1465f344c2b07ff1cbd8a395adac) ) // BADADDR xxx-xxxxxxxxxxxxxxxxxxx
 	ROM_SYSTEM_BIOS( 4, "sp10",  "Spanish v1.0" )   // 152-11546 Leapster Baserom SP v1.0        - Apr 03 2006 06:26:00
 	ROM_LOAD_BIOS( 4, "leapster2_1008.bin", 0x00000, 0x800000, CRC(b43345e7) SHA1(31c27e79568115bf36e5ef668f528e3005054152) )
-	ROM_SYSTEM_BIOS( 5, "connb5",  "Connected B5" )  // 152-12076 Leapster Connected Baserom B5   - Feb 29 2008 18:11:21
-	ROM_LOAD_BIOS( 5, "152-12076_b5.bin",   0x00000, 0x800000, CRC(4d223022) SHA1(bdc10ad70aa7641716e16fbea16bd0ef35f6e85e) ) // is this a Leapster 2 BIOS or another device called "Leapster Connected"?
 	ROM_DEFAULT_BIOS( "uni15" )
 ROM_END
 
@@ -669,6 +664,8 @@ ROM_START(leapster2)
 	ROM_LOAD_BIOS( 0, "152-12659_m9.bin",  0x00000, 0x800000, CRC(57bde604) SHA1(4b5eaac1e40bc605eb4cf6d4ad212343334762fd) )
 	ROM_SYSTEM_BIOS( 1, "2x_06",     "2x 0.6" )     // 152-12206 Leapster 2x Baserom 0.6     - Feb 02 2009 17:15:38
 	ROM_LOAD_BIOS( 1, "152-12206_0.6.bin", 0x00000, 0x800000, CRC(fa94d9a7) SHA1(c5bd84146701dc4a7635b0e37adedb90747adf32) )
+	ROM_SYSTEM_BIOS( 2, "connb5",  "Connected B5" )  // 152-12076 Leapster Connected Baserom B5   - Feb 29 2008 18:11:21
+	ROM_LOAD_BIOS( 2, "152-12076_b5.bin",   0x00000, 0x800000, CRC(4d223022) SHA1(bdc10ad70aa7641716e16fbea16bd0ef35f6e85e) )
 	ROM_DEFAULT_BIOS( "2xcip3_m9" )
 ROM_END
 
