@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood
+// copyright-holders:David Haywood, Alice Shelton
 /*
     LeapFrog - Leapster
 
@@ -227,7 +227,6 @@ private:
 	uint32_t screen_update_leapster(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	DECLARE_DEVICE_IMAGE_LOAD_MEMBER(cart_load);
 
-	INTERRUPT_GEN_MEMBER(testirq);
 	TIMER_CALLBACK_MEMBER(leapster_timer_overflow);
 
 	uint32_t leapster_1801000_r();
@@ -236,14 +235,24 @@ private:
 	uint32_t leapster_180100c_r();
 	uint32_t leapster_1801018_r();
 	uint32_t leapster_1809004_r();
-	uint32_t leapster_1809008_r();
 	uint32_t leapster_180b000_r();
 	uint32_t leapster_180b004_r();
 	uint32_t leapster_180b008_r();
 	uint32_t leapster_180d514_r();
 
+	uint32_t leapster_180004c_r();
+
+	void leapster_1802070_w(uint32_t data);
+
+	uint32_t leapster_cpu_clock_r();
+	void leapster_cpu_clock_w(uint32_t data);
+
 	uint32_t leapster_adc_r(uint32_t offset);
 	void leapster_adc_w(uint32_t offset, uint32_t data);
+	uint32_t leapster_lcd_r(uint32_t offset);
+	void leapster_lcd_w(uint32_t offset, uint32_t data);
+	uint32_t leapster_dma_r(uint32_t offset);
+	void leapster_dma_w(uint32_t offset, uint32_t data);
 	uint32_t leapster_timer_r(uint32_t offset);
 	void leapster_timer_w(uint32_t offset, uint32_t data);
 
@@ -268,14 +277,23 @@ private:
 	uint32_t m_timer_control[3]{};
 	uint32_t m_timer_max[3]{};
 	emu_timer *m_overflow_timer[3]{};
-	// Timer 3 interrupts are never enabled, so its IRQ number is unknown
-	static constexpr int TIMER_IRQS[3] = {0x19, 0x1a, 0x00};
+	static constexpr int TIMER_IRQS[3] = {0x19, 0x1a, 0x1e};
+
+	uint16_t m_framebuffer_base;
+	uint32_t m_display_format = 0;
+	uint32_t m_display_stride;
+
+	uint32_t m_dma_src_addr;
+	uint32_t m_dma_scanline_count;
+	uint32_t m_dma_start_offset;
+	uint32_t m_dma_stride; // Counted in words
 
 	required_device<arcompact_device> m_maincpu;
 	required_device<generic_slot_device> m_cart;
 	required_device<palette_device> m_palette;
 
 	memory_region *m_cart_rom = nullptr;
+	uint32_t m_cart_bit = 0x0400'0000;
 };
 
 
@@ -369,17 +387,28 @@ uint32_t leapster_state::leapster_1801018_r()
 	return 0x00000000;
 }
 
+// Bits: UUUU UCSS SLDU UUUU UCUU UUUU UUUU UUUU
+// C: 0 if a cartridge is present, 1 otherwise
+// S: Identifies the LCD the leapster was manufactured with? On the original Leapster, 4, 6, and 7 are valid possibilites.
+// L: Controls logging level?
+// D: If not set, there are many places where execution infinite loops on error rather than panic. Controls debug logging level
+// C: If not set, the system will boot to the touch calibration
+// U: Unknown
 uint32_t leapster_state::leapster_1809004_r()
 {
 	logerror("%s: leapster_1809004_r (return usually checked against 0x00200000)\n", machine().describe_context());
-	// does an AND with 0x00200000 and often jumps to dead loops if that fails
-	return 0x04200000;
+	return 0x0380'4000 | m_cart_bit;
 }
 
-uint32_t leapster_state::leapster_1809008_r()
+uint32_t leapster_state::leapster_cpu_clock_r()
 {
-	logerror("%s: leapster_1809008_r\n", machine().describe_context());
-	return 0x00000000;
+	return 0;
+}
+
+// Lower 3 bits are always masked for after read, but upper 29 bits never set?
+void leapster_state::leapster_cpu_clock_w(uint32_t data)
+{
+	m_maincpu->set_unscaled_clock_int(96000000 / (1 << (data & 0x07)));
 }
 
 uint32_t leapster_state::leapster_180b000_r()
@@ -403,11 +432,34 @@ uint32_t leapster_state::leapster_180b008_r()
 	return 0x00000001;
 }
 
+// UART Status register (0x0180'd510) bits:
+// 0x80 (R): 1 indicates ready for output
+// 0x40 (W): 1 causes the current byte in the transfer register to be sent
+// 0x20 (R): 0 indicates transfer register contains a received byte
+// 0x04 (W): 1 sets IRQ line clear?
+// 0x01..0x02 (R): Unknown, used when recieving bytes
+// Interrupts are done on IRQ 0x1b when a byte is received or when the other end is ready for another transfer 
 uint32_t leapster_state::leapster_180d514_r()
 {
 	logerror("%s: leapster_180d514_r (return usually checked against 0x0030d400)\n", machine().describe_context());
 	// leapster -bios 0 does a BRNE in a loop comparing with 0x80
-	return 0x00000080;
+	return 0x000000A0;
+}
+
+// Official name: GIODataIn
+uint32_t leapster_state::leapster_180004c_r()
+{
+	// Prevents Leapster from detecting a change in power status and shutting down
+	return 0xffff'ffff;
+}
+
+// Seems to be used to commit a change to a hardware voice
+// The lower 3 bits are the voice index and the upper 29 are a command
+// After this data is received, the audio unit acks it by raising IRQ 0x1d
+// The audio driver will wait for this before making any more voice changes
+void leapster_state::leapster_1802070_w(uint32_t data)
+{
+	m_maincpu->set_input_line(29, ASSERT_LINE);
 }
 
 // ADC: I/O registers 0x0180'0090 - 0x0180'00ab, Drives IRQ vector 0x10
@@ -429,6 +481,100 @@ uint32_t leapster_state::leapster_adc_r(uint32_t offset)
 void leapster_state::leapster_adc_w(uint32_t offset, uint32_t data)
 {
 	logerror("%s: Unknown ADC I/O write! Addr: %08x, data: %08x\n", machine().describe_context(), 0x0180'0090 + (offset * 4), data);
+}
+
+uint32_t leapster_state::leapster_lcd_r(uint32_t offset)
+{
+	switch (offset)
+	{
+		case 0: // Written once, never read
+			break;
+		case 1: // Framebuffer base
+			return m_framebuffer_base;
+		case 2: // Stride
+			return m_display_stride;
+		case 3: // Display format
+			return m_display_format;
+		case 4: // Unknown
+			break;
+		case 5: // Never written
+			break;
+		case 6: // Written once, never read
+			break;
+	}
+
+	logerror("%s: Unknown LCD I/O read! Addr: %08x\n", machine().describe_context(), 0x0180'8084 + (offset * 4));
+
+	return 0;
+}
+
+void leapster_state::leapster_lcd_w(uint32_t offset, uint32_t data)
+{
+	switch (offset)
+	{
+		case 1:
+			m_framebuffer_base = data;
+			return;
+		case 2: // Stride
+			m_display_stride = data;
+			return;
+		case 3: // Display format
+			if (BIT(data, 31) && BIT(data, 0, 30) != 4)
+			{
+				fatalerror("Unimplemented display mode\n");
+			}
+
+			m_display_format = data;
+			return;
+	}
+
+	logerror("%s: Unknown LCD I/O write! Addr: %08x, data: %08x\n", machine().describe_context(), 0x0180'8084 + (offset * 4), data);
+}
+
+uint32_t leapster_state::leapster_dma_r(uint32_t offset)
+{
+	return 0;
+}
+
+void leapster_state::leapster_dma_w(uint32_t offset, uint32_t data)
+{
+	switch (offset)
+	{
+		case 0: {
+			if (data == 0x1b)
+			{
+				uint32_t dmaDst = 0x0300'0000 + m_framebuffer_base + m_dma_start_offset;
+				uint32_t dmaSrc = m_dma_src_addr;
+
+				for (int i = 0; i < m_dma_scanline_count; i++)
+				{
+					for (int j = 0; j < m_dma_stride; j++)
+					{
+						m_maincpu->space().write_dword(dmaDst, m_maincpu->space().read_dword(dmaSrc));
+						dmaDst += 4;
+						dmaSrc += 4;
+					}
+				}
+
+				// IRQ 0x12 when DMA is finished
+				m_maincpu->set_input_line(18, ASSERT_LINE);
+			}
+
+			return;
+		}
+		case 1:
+			m_dma_src_addr = data;
+			return;
+		case 2:
+			m_dma_stride = data;
+			return;
+		case 3:
+			m_dma_scanline_count = data;
+			return;
+		case 4:
+			m_dma_start_offset = data;
+			return;
+	}
 }
 
 uint32_t leapster_state::leapster_timer_r(uint32_t offset)
@@ -459,6 +605,28 @@ uint32_t leapster_state::leapster_timer_r(uint32_t offset)
 void leapster_state::leapster_timer_w(uint32_t offset, uint32_t data)
 {
 	offset *= 4;
+
+	if (offset == 0x0510)
+	{
+		printf("%c", data);
+		return;
+	}
+
+	if (offset == 0x0514)
+	{
+		// MQX blocks when the output queue fills, so the UART IRQ must have at least bare-bones emulation for transfer
+		if (data == 0x44)
+		{
+			m_maincpu->set_input_line(0x1b, ASSERT_LINE);
+		}
+
+		return;
+	}
+
+	if (offset & 0x0300)
+	{
+		return;
+	}
 
 	int index = BIT(offset, 10, 2);
 
@@ -491,6 +659,28 @@ void leapster_state::leapster_timer_w(uint32_t offset, uint32_t data)
 
 uint32_t leapster_state::screen_update_leapster(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
+	if (!BIT(m_display_format, 31))
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < 160; i++)
+	{
+		for (int j = 0; j < 80; j++)
+		{
+			uint8_t byteOne;
+			uint8_t byteTwo;
+			uint8_t byteThree;
+
+			byteOne = m_maincpu->space().read_byte(0x0300'0000 + m_framebuffer_base + i * m_display_stride + j * 3);
+			byteTwo = m_maincpu->space().read_byte(0x0300'0000 + m_framebuffer_base + i * m_display_stride + j * 3 + 1);
+			byteThree = m_maincpu->space().read_byte(0x0300'0000 + m_framebuffer_base + i * m_display_stride + j * 3 + 2);
+
+			bitmap.pix(i, j * 2) = pal444(byteOne | ((byteTwo & 0xF0) << 4), 8, 4, 0);
+			bitmap.pix(i, j * 2 + 1) = pal444((byteThree << 4) | (byteTwo & 0x0F), 0, 8, 4);
+		}
+	}
+
 	return 0;
 }
 
@@ -512,6 +702,7 @@ void leapster_state::machine_start()
 	if (m_cart_rom)
 	{
 		m_maincpu->space(AS_PROGRAM).install_rom(0x80000000, 0x807fffff, m_cart_rom->base());
+		m_cart_bit = 0;
 	}
 
 	for (uint32_t i = 0; i < 3; i++)
@@ -536,14 +727,23 @@ void leapster_state::machine_reset()
 		m_timer_max[i] = 0xffffffff;
 		m_overflow_timer[i]->reset(attotime::from_ticks(m_timer_max[i], 16'000'000));
 	}
+
+	m_display_format = 0;
+	m_display_stride = 0;
+	m_framebuffer_base = 0;
+
+	m_dma_src_addr = 0;
+	m_dma_scanline_count = 0;
+	m_dma_start_offset = 0;
+	m_dma_stride = 0;
 }
 
 void leapster_state::leapster_map(address_map &map)
 {
 //  A vector table is copied from 0x00000000 to 0x3c000000, but it is unclear if that is a BIOS mirror
 //  or if it should be copying a different table.
-	map(0x00000000, 0x007fffff).mirror(0x40000000).rom().region("maincpu", 0);
-	//map(0x40000000, 0x407fffff).rom().region("maincpu", 0);
+	map(0x0000'0000, 0x007f'ffff).mirror(0x40000000).rom().region("maincpu", 0);
+//	map(0x4000'0000, 0x407f'ffff).rom().region("maincpu", 0);
 
 	map(0x0180'0090, 0x0180'00ab).rw(FUNC(leapster_state::leapster_adc_r), FUNC(leapster_state::leapster_adc_w));
 
@@ -553,8 +753,16 @@ void leapster_state::leapster_map(address_map &map)
 	map(0x0180100c, 0x0180100f).r(FUNC(leapster_state::leapster_180100c_r));
 	map(0x01801018, 0x0180101b).r(FUNC(leapster_state::leapster_1801018_r));
 
+	map(0x0180'004c, 0x0180'004f).r(FUNC(leapster_state::leapster_180004c_r));
+
+	map(0x0180'2070, 0x0180'2073).w(FUNC(leapster_state::leapster_1802070_w));
+
+	map(0x0180'8084, 0x0180'809b).rw(FUNC(leapster_state::leapster_lcd_r), FUNC(leapster_state::leapster_lcd_w));
+
+	map(0x0180'8800, 0x0180'881b).rw(FUNC(leapster_state::leapster_dma_r), FUNC(leapster_state::leapster_dma_w));
+
 	map(0x01809004, 0x01809007).r(FUNC(leapster_state::leapster_1809004_r));
-	map(0x01809008, 0x0180900b).r(FUNC(leapster_state::leapster_1809008_r));
+	map(0x01809008, 0x0180900b).rw(FUNC(leapster_state::leapster_cpu_clock_r), FUNC(leapster_state::leapster_cpu_clock_w));
 
 	map(0x0180b000, 0x0180b003).r(FUNC(leapster_state::leapster_180b000_r));
 	map(0x0180b004, 0x0180b007).r(FUNC(leapster_state::leapster_180b004_r));
@@ -564,9 +772,14 @@ void leapster_state::leapster_map(address_map &map)
 
 	map(0x0180d514, 0x0180d517).r(FUNC(leapster_state::leapster_180d514_r));
 
-	map(0x03000000, 0x030007ff).ram(); // puts stack here, writes a pointer @ 0x03000000 on startup
-	map(0x03000800, 0x0300ffff).ram(); // some of the later models need to store stack values here (or code execution has gone wrong?)
-	map(0x3c000000, 0x3c1fffff).ram(); // vector base gets moved here with new IRQ table, puts task stacks etc. here
+	// VRAM, also used for stack prior to MQX boot
+	map(0x0300'0000, 0x0300'ffff).ram();
+
+	// The original Leapster BIOS can write past the end of VRAM in its clear screen function (caused by asl by 2 at 0x4007'bc32)
+	// This seems to be a bug (pointer arithmetic done on the wrong size?) and doesn't appear in later BIOS
+	map(0x0301'0000, 0x0302'ffff).nopw();
+
+	map(0x3c00'0000, 0x3c1f'ffff).ram(); // Main memory
 	map(0x3c200000, 0x3fffffff).ram();
 	// map(0x80000000, 0x807fffff).bankr("cartrom"); // game ROM pointers are all to the 80xxxxxx region, so I assume it maps here - installed if a cart is present
 }
@@ -585,17 +798,12 @@ void leapster_state::leapster_aux(address_map &map)
 	map(0x00000004b, 0x00000004b).w(FUNC(leapster_state::leapster_aux004b_w));
 }
 
-INTERRUPT_GEN_MEMBER(leapster_state::testirq)
-{
-//	m_maincpu->set_input_line(0x12, ASSERT_LINE);
-}
-
 TIMER_CALLBACK_MEMBER(leapster_state::leapster_timer_overflow)
 {
 	m_timer_ticks[param] = 0;
 	m_overflow_timer[param]->reset(attotime::from_ticks(m_timer_max[param], 16'000'000));
 
-	if (m_timer_control[param] == 3 && TIMER_IRQS[param] != 0)
+	if (BIT(m_timer_control[param], 0))
 	{
 		m_maincpu->set_input_line(TIMER_IRQS[param], ASSERT_LINE);
 	}
@@ -609,7 +817,6 @@ void leapster_state::leapster(machine_config &config)
 	m_maincpu->set_addrmap(AS_PROGRAM, &leapster_state::leapster_map);
 	m_maincpu->set_addrmap(AS_IO, &leapster_state::leapster_aux);
 	m_maincpu->set_default_vector_base(0x40000000);
-	m_maincpu->set_vblank_int("screen", FUNC(leapster_state::testirq));
 
 	// Video hardware
 	screen_device &screen(SCREEN(config, "screen", SCREEN_TYPE_LCD));
