@@ -213,7 +213,8 @@ public:
 		driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_cart(*this, "cartslot"),
-		m_palette(*this, "palette")
+		m_palette(*this, "palette"),
+		m_buttons(*this, "BUTTONS")
 		{ }
 
 	void leapster(machine_config &config);
@@ -288,9 +289,13 @@ private:
 	uint32_t m_dma_start_offset;
 	uint32_t m_dma_stride; // Counted in words
 
+	uint32_t m_clock_div;
+
 	required_device<arcompact_device> m_maincpu;
 	required_device<generic_slot_device> m_cart;
 	required_device<palette_device> m_palette;
+	
+	required_ioport m_buttons;
 
 	memory_region *m_cart_rom = nullptr;
 	uint32_t m_cart_bit = 0x0400'0000;
@@ -298,6 +303,23 @@ private:
 
 
 static INPUT_PORTS_START( leapster )
+	PORT_START("BUTTONS")
+	PORT_BIT(0x0000'0080, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT) PORT_NAME("Right");
+	PORT_BIT(0x0000'0100, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN)  PORT_NAME("Down");
+	PORT_BIT(0x0000'0200, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT)  PORT_NAME("Left");
+	PORT_BIT(0x0000'2000, IP_ACTIVE_LOW, IPT_BUTTON2)        PORT_NAME("B");
+	PORT_BIT(0x0000'4000, IP_ACTIVE_LOW, IPT_BUTTON1)        PORT_NAME("A");
+	PORT_BIT(0x0000'8000, IP_ACTIVE_LOW, IPT_VOLUME_DOWN)    PORT_NAME("Volume Down");
+	PORT_BIT(0x0001'0000, IP_ACTIVE_LOW, IPT_VOLUME_UP)      PORT_NAME("Volume Up");
+	PORT_BIT(0x0400'0000, IP_ACTIVE_LOW, IPT_SELECT)         PORT_NAME("Select");
+	PORT_BIT(0x1000'0000, IP_ACTIVE_LOW, IPT_BUTTON3)        PORT_NAME("Hint");
+	PORT_BIT(0x2000'0000, IP_ACTIVE_LOW, IPT_BUTTON4)        PORT_NAME("Home");
+	PORT_BIT(0x8000'0000, IP_ACTIVE_LOW, IPT_JOYSTICK_UP)    PORT_NAME("Up");
+
+	// Used for contrast and brightness control on hardware? Used to dump Flash debug info in software
+	PORT_BIT(0x0002'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 1");
+	PORT_BIT(0x0100'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 2");
+	PORT_BIT(0x0200'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 3");
 INPUT_PORTS_END
 
 void leapster_state::leapster_aux0010_w(uint32_t data)
@@ -402,12 +424,13 @@ uint32_t leapster_state::leapster_1809004_r()
 
 uint32_t leapster_state::leapster_cpu_clock_r()
 {
-	return 0;
+	return m_clock_div;
 }
 
 // Lower 3 bits are always masked for after read, but upper 29 bits never set?
 void leapster_state::leapster_cpu_clock_w(uint32_t data)
 {
+	m_clock_div = data;
 	m_maincpu->set_unscaled_clock_int(96000000 / (1 << (data & 0x07)));
 }
 
@@ -447,10 +470,14 @@ uint32_t leapster_state::leapster_180d514_r()
 }
 
 // Official name: GIODataIn
+// The GIO bus seems to be composed as a bitfield combining:
+//  1.) Power / docking info
+//  2.) Button input state
+//  3.) (On Leapster 2): Internal Flash data in
 uint32_t leapster_state::leapster_180004c_r()
 {
-	// Prevents Leapster from detecting a change in power status and shutting down
-	return 0xffff'ffff;
+	// Set all non-button bits to 1 to avoid detecting a shutdown for now
+	return (0xffff'ffff & ~(0xb703'e380)) | m_buttons->read();
 }
 
 // Seems to be used to commit a change to a hardware voice
