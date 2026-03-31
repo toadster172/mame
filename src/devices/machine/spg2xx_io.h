@@ -187,7 +187,7 @@ protected:
 
 	uint16_t m_io_regs[0x100];
 
-	uint8_t m_uart_rx_fifo[8];
+	uint8_t m_uart_rx_fifo[128];
 	uint8_t m_uart_rx_fifo_start;
 	uint8_t m_uart_rx_fifo_end;
 	uint8_t m_uart_rx_fifo_count;

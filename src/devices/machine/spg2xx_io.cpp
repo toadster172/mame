@@ -216,6 +216,7 @@ void spg2xx_io_device::uart_rx(uint8_t data)
 		m_uart_rx_fifo[m_uart_rx_fifo_end] = data;
 		m_uart_rx_fifo_end = (m_uart_rx_fifo_end + 1) % std::size(m_uart_rx_fifo);
 		m_uart_rx_fifo_count++;
+		printf("UART fifo count: %X, Buad rate: %X\n", m_uart_rx_fifo_count, m_uart_baud_rate);
 		if (m_uart_rx_timer->remaining() == attotime::never)
 			m_uart_rx_timer->adjust(attotime::from_ticks(BIT(m_io_regs[REG_UART_CTRL], 5) ? 11 : 10, m_uart_baud_rate));
 	}
