@@ -503,13 +503,11 @@ private:
 		m_regs[REG_PCL] = m_pc & 0xfffffffc; // always 32-bit aligned
 	}
 
-	// On ARCtangent-A5/ARC600, the effect of unaligned data access is system dependent.
-	// On the Leapster, Flash will attempt an unaligned access every time it draws a frame.
-	// This seems to be a Flash bug (the bool that it reads before doing the access is uninitialized),
-	// and it occurs on every version of Flash for the Leapster.
-	// Behaviour should be checked on hardware, but for now misaligned bits are dropped, which
-	// seems to allow running without issue.
-
+	// On ARCtangent-A5/ARC600, the effect of unaligned data access is system dependent. The Leapster
+	//   seems to simply ignore misaligned bits. This has been tested and confirmed on a Leapster 2.
+	//   This is required to emulate, as the Leapster's Flash implementation has a bug that causes
+	//   it to dereference a null pointer, read a garbage pointer from that dereference, and do
+	//   a misaligned memory access with it.
 	uint32_t READ32(uint32_t address)
 	{
 		return m_program->read_dword(address & 0xfffffffc);

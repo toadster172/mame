@@ -373,15 +373,15 @@ static INPUT_PORTS_START( leapster )
 	PORT_BIT(0x0000'4000, IP_ACTIVE_LOW, IPT_BUTTON2)        PORT_NAME("A")
 	PORT_BIT(0x0000'8000, IP_ACTIVE_LOW, IPT_VOLUME_DOWN)    PORT_NAME("Volume Down")
 	PORT_BIT(0x0001'0000, IP_ACTIVE_LOW, IPT_VOLUME_UP)      PORT_NAME("Volume Up")
-	PORT_BIT(0x0400'0000, IP_ACTIVE_LOW, IPT_SELECT)         PORT_NAME("Select")
+	PORT_BIT(0x0400'0000, IP_ACTIVE_LOW, IPT_SELECT)         PORT_NAME("Pause")
 	PORT_BIT(0x1000'0000, IP_ACTIVE_LOW, IPT_BUTTON4)        PORT_NAME("Hint")
 	PORT_BIT(0x2000'0000, IP_ACTIVE_LOW, IPT_BUTTON5)        PORT_NAME("Home")
 	PORT_BIT(0x8000'0000, IP_ACTIVE_LOW, IPT_JOYSTICK_UP)    PORT_NAME("Up")
 
-	// Used for contrast and brightness control on hardware? Used to dump Flash debug info in software
-	PORT_BIT(0x0002'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 1")
-	PORT_BIT(0x0100'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 2")
-	PORT_BIT(0x0200'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Unknown 3")
+	// Also used to dump Flash debug info in software
+	PORT_BIT(0x0002'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Brightness Down")
+	PORT_BIT(0x0100'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Brightness Up")
+	PORT_BIT(0x0200'0000, IP_ACTIVE_LOW, IPT_UNKNOWN)        PORT_NAME("Contrast")
 
 	PORT_START("TOUCHX")
 	PORT_BIT(0x7ff, 0x3df, IPT_LIGHTGUN_X) PORT_MINMAX(0x00, 0x7f0) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_SENSITIVITY(25) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(leapster_state::leapster_touch_down), 1)
@@ -480,19 +480,22 @@ uint32_t leapster_state::leapster_1801018_r()
 	return 0x00000000;
 }
 
-// Bits: UUUU UCSS SLDU UUUU FTUU UUUU UUUU UUUU
+// Bits: UUUU UCSS SLDU UUUU FTUU UUUU UUUP UUUQ
 // C: 0 if a cartridge is present, 1 otherwise
 // S: Identifies the LCD the leapster was manufactured with? On the original Leapster, 4, 6, and 7 are valid possibilites.
 // L: Controls logging level?
 // D: If not set, there are many places where execution infinite loops on error rather than panic. Controls debug logging level
 // F: If not set, Flash will run at 10x the SWF framerate (effectively uncapping the framerate)
 // T: If not set, the system will boot to the touch calibration
+// P: Checked for PEG engine games
+// Q: Also checked for PEG engine games, but its effect is OR'ed with P
 // U: Unknown
 //   The Flash uncapping bit at least is known to be toggleable by shorting one of the cartridge pins
+// Value taken from testing with a Leapster 2 with a retail cartridge
 uint32_t leapster_state::leapster_1809004_r()
 {
 	logerror("%s: leapster_1809004_r (return usually checked against 0x00200000)\n", machine().describe_context());
-	return 0x0380'8000 | m_cart_bit;
+	return 0x63FF'BFFF | m_cart_bit;
 }
 
 uint32_t leapster_state::leapster_eeprom_r(uint32_t offset)
@@ -564,7 +567,7 @@ uint32_t leapster_state::leapster_180b008_r()
 // 0x20 (R): 0 indicates transfer register contains a received byte
 // 0x04 (W): 1 sets IRQ line clear?
 // 0x01..0x02 (R): Unknown, used when recieving bytes
-// Interrupts are done on IRQ 0x1b when a byte is received or when the other end is ready for another transfer 
+// Interrupts are done on IRQ 0x1b when a byte is received or when the other end is ready for another transfer
 uint32_t leapster_state::leapster_180d514_r()
 {
 	logerror("%s: leapster_180d514_r (return usually checked against 0x0030d400)\n", machine().describe_context());
@@ -858,7 +861,7 @@ void leapster_state::leapster_timer_w(uint32_t offset, uint32_t data)
 		case 2: { // Max ticks
 			m_timer_max[index] = data;
 			m_timer_ticks[index] += m_overflow_timer[index]->elapsed().as_ticks(16'000'000);
-			uint32_t ticks_until_overflow = m_timer_ticks[index] >= data ? 0 : data - m_timer_ticks[index];			
+			uint32_t ticks_until_overflow = m_timer_ticks[index] >= data ? 0 : data - m_timer_ticks[index];
 			m_overflow_timer[index]->reset(attotime::from_ticks(ticks_until_overflow, 16'000'000));
 			break;
 		}
@@ -969,7 +972,7 @@ void leapster_state::machine_reset()
 	{
 		m_adc_channel_control[i] = 0;
 	}
-	
+
 	m_adc_fifo_base = 0;
 	m_adc_fifo_head = 0;
 	m_adc_fifo_empty = true;
@@ -1096,7 +1099,7 @@ TIMER_CALLBACK_MEMBER(leapster_state::leapster_touch_adc_update)
 
 	// The leapster touch driver will wait 3 or 4 accepted inputs before confirming a touchscreen
 	//   press and 6 or 7 before confirming a release. I'm not sure what the intended frequency is,
-	//   so I've just set it at 60. 
+	//   so I've just set it at 60.
 
 	m_adc_timer->reset(attotime::from_hz(60));
 }
