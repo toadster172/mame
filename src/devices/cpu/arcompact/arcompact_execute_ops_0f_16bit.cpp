@@ -87,7 +87,7 @@ uint32_t arcompact_device::handleop_TST_S_b_c(uint16_t op)
 	// unlike most 16-bit opcodes, TST_S sets flags
 	if (!result) { status32_set_z(); }
 	else { status32_clear_z(); }
-	if (result & 0x8000000) { status32_set_n(); }
+	if (result & 0x8000'0000) { status32_set_n(); }
 	else { status32_clear_n(); }
 	return m_pc + 2;
 }
