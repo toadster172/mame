@@ -198,10 +198,12 @@ PCB - LEAPSTER-TV:
 #include "bus/generic/slot.h"
 #include "bus/generic/carts.h"
 #include "cpu/arcompact/arcompact.h"
+#include "leapster_a.h"
 
 #include "emupal.h"
 #include "screen.h"
 #include "softlist_dev.h"
+#include "speaker.h"
 
 
 namespace {
@@ -214,6 +216,7 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_cart(*this, "cartslot"),
 		m_palette(*this, "palette"),
+		m_sound(*this, "leapster_snd"),
 		m_buttons(*this, "BUTTONS"),
 		m_touch(*this, {"TOUCHX", "TOUCHY", "TOUCH"})
 		{ }
@@ -238,7 +241,7 @@ private:
 			fatalerror("ADC FIFO full!\n");
 		}
 
-		m_adc_fifo[m_adc_fifo_head] = (channel << 16) | (data << 5); 
+		m_adc_fifo[m_adc_fifo_head] = (channel << 16) | (data << 5);
 		m_adc_fifo_head += 1;
 		m_adc_fifo_head %= sizeof(m_adc_fifo) / sizeof(*m_adc_fifo);
 		m_adc_fifo_empty = false;
@@ -281,6 +284,7 @@ private:
 	uint32_t leapster_180004c_r();
 
 	void leapster_1802070_w(uint32_t data);
+	uint32_t leapster_1802078_r();
 
 	uint32_t leapster_eeprom_r(uint32_t offset);
 	void leapster_eeprom_w(uint32_t offset, uint32_t data);
@@ -355,7 +359,8 @@ private:
 	required_device<arcompact_device> m_maincpu;
 	required_device<generic_slot_device> m_cart;
 	required_device<palette_device> m_palette;
-	
+	required_device<leapster_snd_device> m_sound;
+
 	required_ioport m_buttons;
 	required_ioport_array<3> m_touch;
 
@@ -593,6 +598,15 @@ uint32_t leapster_state::leapster_180004c_r()
 void leapster_state::leapster_1802070_w(uint32_t data)
 {
 	m_maincpu->set_input_line(0x1d, ASSERT_LINE);
+
+	m_sound->do_voice_command(data >> 3, BIT(data, 0, 3));
+}
+
+// Returns a bitfield indicating which audio voices are currently active
+//   In a somewhat weird order, see leapster_snd_device::get_triggered_voices
+uint32_t leapster_state::leapster_1802078_r()
+{
+	return m_sound->get_triggered_voices();
 }
 
 // Seems to signal fired interrupts for cases where one line is used by 2 sources
@@ -943,6 +957,8 @@ void leapster_state::machine_start()
 	memset(m_cartridge_eeprom, 0, sizeof(m_system_eeprom));
 
 	save_item(NAME(m_1a_data));
+
+	m_sound->set_address_space(&m_maincpu->space());
 }
 
 void leapster_state::machine_reset()
@@ -1002,6 +1018,9 @@ void leapster_state::leapster_map(address_map &map)
 	map(0x0180'004c, 0x0180'004f).r(FUNC(leapster_state::leapster_180004c_r));
 
 	map(0x0180'2070, 0x0180'2073).w(FUNC(leapster_state::leapster_1802070_w));
+	map(0x0180'2078, 0x0180'207b).r(FUNC(leapster_state::leapster_1802078_r));
+
+	map(0x0180'4000, 0x0180'4fff).m(m_sound, FUNC(leapster_snd_device::map));
 
 	map(0x0180'8084, 0x0180'809b).rw(FUNC(leapster_state::leapster_lcd_r), FUNC(leapster_state::leapster_lcd_w));
 
@@ -1165,6 +1184,10 @@ void leapster_state::leapster(machine_config &config)
 	screen.set_visarea(0, 160-1, 0, 160-1);
 	screen.set_screen_update(FUNC(leapster_state::screen_update_leapster));
 
+	SPEAKER(config, "mono").front_center();
+	LEAPSTER_SOUND(config, m_sound, 96000000);
+	m_sound->add_route(ALL_OUTPUTS, "mono", 0.25);
+
 	PALETTE(config, "palette").set_format(palette_device::xRGB_444, 0x800).set_endianness(ENDIANNESS_BIG);
 
 	// Cartridge
@@ -1232,7 +1255,7 @@ void leapster_state::init_leapster()
 } // anonymous namespace
 
 
-CONS( 2003, leapster,    0,        0, leapster, leapster, leapster_state, init_leapster, "LeapFrog", "Leapster",       MACHINE_NO_SOUND | MACHINE_NOT_WORKING )
+CONS( 2003, leapster,    0,        0, leapster, leapster, leapster_state, init_leapster, "LeapFrog", "Leapster",       MACHINE_IMPERFECT_SOUND | MACHINE_NOT_WORKING )
 CONS( 2005, leapstertv,  leapster, 0, leapster, leapster, leapster_state, init_leapster, "LeapFrog", "Leapster TV",    MACHINE_NO_SOUND | MACHINE_NOT_WORKING )
 CONS( 2005, leapsterlmx, leapster, 0, leapster, leapster, leapster_state, init_leapster, "LeapFrog", "Leapster L-MAX", MACHINE_NO_SOUND | MACHINE_NOT_WORKING )
 CONS( 2009, leapster2,   leapster, 0, leapster, leapster, leapster_state, init_leapster, "LeapFrog", "Leapster 2",     MACHINE_NO_SOUND | MACHINE_NOT_WORKING )
