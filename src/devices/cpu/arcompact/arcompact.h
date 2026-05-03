@@ -59,9 +59,9 @@ private:
 
 	void arcompact_auxreg012_MULHI_w(uint32_t data);
 
-	uint32_t arcompact_auxreg012_TIMER0_r(offs_t offset);
+	uint32_t arcompact_auxreg021_TIMER0_r(offs_t offset);
 	uint32_t arcompact_auxreg100_TIMER1_r(offs_t offset);
-	void arcompact_auxreg012_TIMER0_w(offs_t offset, uint32_t data);
+	void arcompact_auxreg021_TIMER0_w(offs_t offset, uint32_t data);
 	void arcompact_auxreg100_TIMER1_w(offs_t offset, uint32_t data);
 
 	uint32_t arcompact_auxreg025_INTVECTORBASE_r();
