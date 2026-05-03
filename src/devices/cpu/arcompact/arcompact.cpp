@@ -72,7 +72,7 @@ void arcompact_device::arcompact_auxreg025_INTVECTORBASE_w(uint32_t data)
 	m_INTVECTORBASE = data & 0xfffffc00;
 }
 
-uint32_t arcompact_device::arcompact_auxreg012_TIMER0_r(offs_t offset)
+uint32_t arcompact_device::arcompact_auxreg021_TIMER0_r(offs_t offset)
 {
 	switch (offset)
 	{
@@ -106,7 +106,7 @@ uint32_t arcompact_device::arcompact_auxreg100_TIMER1_r(offs_t offset)
 	return 0x00;
 }
 
-void arcompact_device::arcompact_auxreg012_TIMER0_w(offs_t offset, uint32_t data)
+void arcompact_device::arcompact_auxreg021_TIMER0_w(offs_t offset, uint32_t data)
 {
 	switch (offset)
 	{
@@ -173,7 +173,7 @@ void arcompact_device::arcompact_auxreg_map(address_map& map)
 
 	map(0x000000012, 0x000000012).w(FUNC(arcompact_device::arcompact_auxreg012_MULHI_w));
 
-	map(0x000000021, 0x000000023).rw(FUNC(arcompact_device::arcompact_auxreg012_TIMER0_r), FUNC(arcompact_device::arcompact_auxreg012_TIMER0_w));
+	map(0x000000021, 0x000000023).rw(FUNC(arcompact_device::arcompact_auxreg021_TIMER0_r), FUNC(arcompact_device::arcompact_auxreg021_TIMER0_w));
 
 	map(0x000000025, 0x000000025).rw(FUNC(arcompact_device::arcompact_auxreg025_INTVECTORBASE_r), FUNC(arcompact_device::arcompact_auxreg025_INTVECTORBASE_w));
 
